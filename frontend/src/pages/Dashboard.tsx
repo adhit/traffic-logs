@@ -1,8 +1,20 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDomains, type Preset } from "../api/client";
+import { fetchDomains, fetchDevices, type Preset } from "../api/client";
 import { TimeFilter } from "../components/TimeFilter";
 import { format } from "date-fns";
+
+// Patterns that indicate background app/OS traffic rather than browser visits
+const APP_NOISE = [
+  /^[a-f0-9]{8,}\./i,           // hex-looking subdomains (CDN tokens)
+  /\d{1,3}-\d{1,3}-\d{1,3}/,    // IP-like segments in hostname
+  /(telemetry|metrics|analytics|tracking|ping|update|push|notify|crash|log\.|logs\.|cdn\.|static\.|assets\.|api\.)/,
+  /\.(akamai|cloudfront|fastly|edgekey|edgesuite|akadns)\./,
+];
+
+function looksLikeBrowserDomain(domain: string): boolean {
+  return !APP_NOISE.some((re) => re.test(domain));
+}
 
 interface Props {
   onDomainClick: (domain: string) => void;
@@ -13,27 +25,52 @@ export function Dashboard({ onDomainClick }: Props) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [search, setSearch] = useState("");
+  const [deviceIp, setDeviceIp] = useState("");
+  const [websitesOnly, setWebsitesOnly] = useState(false);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["domains", preset, from, to],
-    queryFn: () => fetchDomains(preset, from, to),
+    queryKey: ["domains", preset, from, to, deviceIp],
+    queryFn: () => fetchDomains(preset, from, to, deviceIp || undefined),
   });
 
-  const rows = (data ?? []).filter((r) =>
-    r.domain.toLowerCase().includes(search.toLowerCase())
-  );
+  const { data: devices } = useQuery({ queryKey: ["devices"], queryFn: fetchDevices });
+
+  const rows = (data ?? [])
+    .filter((r) => r.domain.toLowerCase().includes(search.toLowerCase()))
+    .filter((r) => !websitesOnly || looksLikeBrowserDomain(r.domain));
 
   return (
     <div className="p-6 space-y-5">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <h1 className="text-xl font-semibold text-white">Network Traffic</h1>
         <div className="ml-auto flex items-center gap-3">
+          <select
+            value={deviceIp}
+            onChange={(e) => setDeviceIp(e.target.value)}
+            className="bg-gray-800 text-gray-200 text-sm rounded px-3 py-1.5 border border-gray-700 focus:outline-none focus:border-violet-500"
+          >
+            <option value="">All devices</option>
+            {(devices ?? []).map((d) => (
+              <option key={d.ip} value={d.ip}>
+                {d.friendly_name ?? d.hostname ?? d.ip}
+              </option>
+            ))}
+          </select>
           <input
             placeholder="Search domain…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="bg-gray-800 text-gray-200 text-sm rounded px-3 py-1.5 border border-gray-700 w-52 focus:outline-none focus:border-violet-500"
           />
+          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={websitesOnly}
+              onChange={(e) => setWebsitesOnly(e.target.checked)}
+              className="accent-violet-500"
+            />
+            Websites only
+          </label>
         </div>
       </div>
 

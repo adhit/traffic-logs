@@ -47,8 +47,8 @@ function dateParams(preset: Preset, from?: string, to?: string) {
   return { from_date: from, to_date: to };
 }
 
-export const fetchDomains = (preset: Preset, from?: string, to?: string) =>
-  api.get<DomainRow[]>("/api/domains", { params: dateParams(preset, from, to) }).then((r) => r.data);
+export const fetchDomains = (preset: Preset, from?: string, to?: string, device_ip?: string) =>
+  api.get<DomainRow[]>("/api/domains", { params: { ...dateParams(preset, from, to), ...(device_ip ? { device_ip } : {}) } }).then((r) => r.data);
 
 export const fetchDomainDetail = (domain: string, preset: Preset, from?: string, to?: string) =>
   api.get<DomainDetail>(`/api/domains/${encodeURIComponent(domain)}`, { params: dateParams(preset, from, to) }).then((r) => r.data);

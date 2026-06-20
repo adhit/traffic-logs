@@ -27,9 +27,13 @@ async def list_domains(
     preset: Optional[str] = Query(None, description="1d | 7d | 30d"),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
+    device_ip: Optional[str] = Query(None),
     db: aiosqlite.Connection = Depends(get_db),
 ):
     from_sql, to_sql = _date_range(preset, from_date, to_date)
+
+    device_filter = "AND l.device_ip = :device_ip" if device_ip else ""
+    params: dict = {"device_ip": device_ip} if device_ip else {}
 
     async with db.execute(
         f"""SELECT l.domain,
@@ -40,8 +44,10 @@ async def list_domains(
             FROM dns_logs l
             LEFT JOIN domain_info di ON di.domain = l.domain
             WHERE l.timestamp BETWEEN {from_sql} AND {to_sql}
+            {device_filter}
             GROUP BY l.domain
-            ORDER BY visits DESC"""
+            ORDER BY visits DESC""",
+        params,
     ) as cur:
         rows = [dict(r) for r in await cur.fetchall()]
 
